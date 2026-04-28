@@ -1,0 +1,435 @@
+\documentclass[12pt,a4paper]{report}
+
+% -------------------- Encoding & Fonts --------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% -------------------- Math & Symbols --------------------
+\usepackage{amsmath, amssymb, amsthm}
+
+% -------------------- Layout --------------------
+\usepackage{geometry}
+\geometry{
+  left=3cm,
+  right=3cm,
+  top=2.5cm,
+  bottom=2.5cm
+}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{parskip}
+\usepackage{titlesec}
+\titleformat{\chapter}
+  {\normalfont\LARGE\bfseries} % style
+  {\thechapter}                % label
+  {1em}                        % spacing
+  {}
+\titlespacing*{\chapter}
+{0pt}   % left
+{0pt}  % space before
+{20pt}  % space after
+
+% -------------------- Graphics & Tables --------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+% -------------------- Code Listings --------------------
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.98,0.98,0.95}
+
+\lstset{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny\color{codegray},
+    frame=single,
+    rulecolor=\color{black!20},
+    xleftmargin=10pt,
+    xrightmargin=10pt,
+    showstringspaces=false
+}
+
+% -------------------- Hyperlinks --------------------
+\usepackage{hyperref}
+
+% -------------------- Lists --------------------
+\usepackage{enumitem}
+\setlist[itemize]{topsep=4pt, itemsep=2pt}
+
+% -------------------- Glossary --------------------
+\usepackage{glossaries}
+\makeglossaries
+
+% -------------------- Section Formatting --------------------
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+% -------------------- Header/Footer --------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Optimization Dynamics Laboratory}
+\lhead{Technical Report}
+\cfoot{\thepage}
+
+% -------------------- Title --------------------
+\title{\textbf{Optimization Dynamics Laboratory}\\
+\large Technical Report}
+\author{Nicolas Iskandar}
+\date{\today}
+
+% ==========================================================
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\clearpage
+\setcounter{page}{1}
+
+% -------------------- Glossary Entries --------------------
+\newglossaryentry{GD}{name=GD, description={Gradient Descent}, first={Gradient Descent (GD)}}
+\newglossaryentry{LS}{name=LS, description={Line Search}, first={Line Search (LS)}}
+\newglossaryentry{Hess}{name=Hess, description={Hessian Matrix}, first={Hessian Matrix (Hess)}}
+\newglossaryentry{GDLS}{name=GDLS, description={Gradient Descent with Line Search}, first={Gradient Descent with Line Search (GDLS)}}
+\newglossaryentry{MGD}{name=MGD, description={Momentum Gradient Descent}, first={Momentum Gradient Descent (MGD)}}
+\newglossaryentry{TR}{name=TR, description={TrajectoryRunner}, first={TrajectoryRunner (TR)}}
+\newglossaryentry{Diag}{name=Diag, description={Diagnostics}, first={Diagnostics (Diag)}}
+
+% Added glossary terms
+\newglossaryentry{Armijo}{
+name=Armijo Condition,
+description={A sufficient decrease condition used in backtracking line search ensuring each step reduces the objective relative to its linear approximation},
+first={Armijo Condition}
+}
+
+\newglossaryentry{DirectionalDerivative}{
+name=Directional Derivative,
+description={Rate of change of a function along a direction, computed as the dot product of the gradient and a direction vector},
+first={Directional Derivative}
+}
+
+\newglossaryentry{Unimodal}{
+name=Unimodal Function,
+description={A function with a single minimum on a given interval, assumed in golden section search},
+first={Unimodal Function}
+}
+
+\newglossaryentry{PenaltyMethod}{
+name=Penalty Method,
+description={A constrained optimization method that penalizes constraint violations via a weighted term added to the objective},
+first={Penalty Method}
+}
+
+\newglossaryentry{Lagrangian}{
+name=Lagrangian,
+description={A function combining objective and constraints using Lagrange multipliers to enforce equality constraints},
+first={Lagrangian}
+}
+
+\newglossaryentry{FeasibilityCorrection}{
+name=Feasibility Correction,
+description={A projection-like step that moves iterates toward the constraint manifold when constraint violation is large},
+first={Feasibility Correction}
+}
+
+\newglossaryentry{FiniteDifference}{
+name=Finite Difference Method,
+description={A numerical technique for approximating derivatives using small perturbations of the input},
+first={Finite Difference Method}
+}
+
+\newglossaryentry{GradientDescent}{
+name=Gradient Descent,
+description={An iterative optimization method that updates parameters in the negative gradient direction to minimize a function},
+first={Gradient Descent}
+}
+
+% -------------------- Abstract --------------------
+\begin{abstract}
+The Optimization Dynamics Laboratory is a Python framework for the empirical study of numerical optimization. It implements gradient-based, line-search, second-order, and constrained solvers from first principles, together with finite-difference derivatives and trajectory diagnostics. This report describes the system architecture, the numerical approximations used by the solvers, and the visualization layer used to inspect optimization dynamics.
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+% ==========================================================
+\chapter{System Architecture}
+
+The laboratory is a modular system separating objective functions, optimizers, diagnostics, and visualization components. The design is intended to keep the numerical core transparent and to make algorithmic behavior easy to inspect.
+
+\section{Core Modules}
+
+\begin{itemize}
+    \item \textbf{\texttt{core/}}: Finite-difference differentiation engine for gradients and Hessians.
+    \item \textbf{\texttt{functions/}}: Collection of 2D objective functions.
+    \item \textbf{\texttt{optimizers/}}: First-order, second-order, and line-search methods.
+    \item \textbf{\texttt{dynamics/}}: Trajectory storage and diagnostic computation.
+    \item \textbf{\texttt{visualization/}}: 2D and 3D plotting utilities.
+\end{itemize}
+
+\section{Execution Engine: TrajectoryRunner}
+
+The \gls{TR} class manages execution of optimization runs and stores the resulting optimization trajectory together with diagnostics.
+
+\begin{lstlisting}[language=Python]
+trajectory_array = optimizer.optimize(function.f, x0, steps=steps, tol=tol)
+diagnostics_data = Diagnostics.compute_trajectory_diagnostics(function.f, trajectory_array)
+trajectory = Trajectory(function, optimizer_name, x0, trajectory_array, diagnostics_data)
+\end{lstlisting}
+
+Batch utilities include:
+\begin{itemize}
+    \item \texttt{run\_comparison}: compare multiple optimizers on the same objective.
+    \item \texttt{run\_multistart}: evaluate sensitivity to initialization.
+\end{itemize}
+
+% ==========================================================
+\chapter{Numerical Differentiation}
+
+The system avoids automatic differentiation and instead uses finite differences. This keeps the implementation compact and makes the numerical approximations explicit.
+
+\section{Gradient Approximation}
+
+The gradient $\nabla f(x)$ is approximated using central differences:
+\begin{equation}
+\frac{\partial f}{\partial x_i} \approx \frac{f(x + \epsilon e_i) - f(x - \epsilon e_i)}{2\epsilon},
+\end{equation}
+where $e_i$ is the $i$-th unit vector and $\epsilon$ is a small finite-difference step. This is a second-order accurate approximation in $\epsilon$.
+
+\section{Hessian Approximation via Gradient Differencing}
+
+The Hessian matrix is computed as the finite difference of the gradient, i.e. as the derivative of $\nabla f(x)$. For each column $i$,
+\begin{equation}
+H_{:,i} \approx \frac{\nabla f(x + \epsilon e_i) - \nabla f(x - \epsilon e_i)}{2\epsilon}.
+\end{equation}
+
+This is equivalent to approximating second derivatives:
+\begin{equation}
+H_{ij} = \frac{\partial^2 f}{\partial x_i \partial x_j},
+\end{equation}
+but the implementation reuses the gradient routine directly. This makes the code simpler and keeps the Hessian logic consistent with the gradient module.
+
+% ==========================================================
+\chapter{Optimization Algorithms}
+
+\section{Momentum Gradient Descent}
+
+Momentum gradient descent augments the basic gradient update with a velocity term:
+\begin{lstlisting}[language=Python]
+v = beta * v - step_size * grad
+x = x + v
+\end{lstlisting}
+The parameter $\beta \in [0,1)$ determines how much of the previous direction is retained. This reduces zig-zag motion on ill-conditioned objective surfaces.
+
+\section{Newton's Method}
+
+Newton's method uses the local quadratic model of the objective. The update direction $\Delta x$ is obtained by solving
+\begin{equation}
+H(x_k)\Delta x = -\nabla f(x_k).
+\end{equation}
+The implementation uses \texttt{np.linalg.solve} rather than forming an explicit inverse. This is numerically preferable because it solves the linear system directly and is more stable when the Hessian is poorly conditioned.
+
+% ==========================================================
+\chapter{Line Search Methods}
+
+Line search selects a step size $\alpha$ once a search direction $d$ has been chosen. The full multidimensional objective is reduced to a one-dimensional function along the line
+\begin{equation}
+\phi(\alpha) = f(x + \alpha d),
+\end{equation}
+where $x$ is the current iterate. All line-search routines in the project operate on $\phi(\alpha)$.
+
+\section{Why Line Search is Needed}
+
+A fixed step size can be too large on steep or curved objectives and too small on flat ones. Line search adapts the step to the local geometry of the objective. This makes the optimizer more stable and usually more efficient than using a fixed learning rate alone.
+
+\section{Global Convergence: Backtracking Line Search}
+
+Backtracking line search implements the Armijo sufficient decrease condition. Starting from an initial step size $\alpha_0$, the algorithm repeatedly shrinks the step by a factor $\rho \in (0,1)$ until
+\begin{equation}
+f(x + \alpha d) \leq f(x) + c \alpha \nabla f(x)^T d
+\end{equation}
+is satisfied, where $c \in (0,1)$.
+
+The quantity
+\begin{equation}
+\nabla f(x)^T d
+\end{equation}
+is the \gls{DirectionalDerivative}. It measures the instantaneous rate of change of the objective if one moves in direction $d$. If $d$ is a descent direction, then $\nabla f(x)^T d < 0$, so the right-hand side represents a predicted decrease.
+
+The implementation follows this logic directly:
+\begin{lstlisting}[language=Python]
+f_x = f(x)
+grad = Gradient.get_grad(f, x)
+directional_deriv = np.dot(grad, direction)
+
+step_size = initial_step
+for _ in range(max_iters):
+    f_new = f(x + step_size * direction)
+    if f_new <= f_x + c * step_size * directional_deriv:
+        return step_size
+    step_size *= rho
+\end{lstlisting}
+
+This does not attempt to find the exact minimizer along the line. It only requires a step that decreases the objective sufficiently relative to the local linear approximation. That is enough to prevent overly aggressive updates on difficult landscapes.
+
+\section{Derivative-Free Line Search: Golden Section Search}
+
+Golden section search solves the one-dimensional problem
+\begin{equation}
+\min_{\alpha \in [a,b]} \phi(\alpha) = f(x + \alpha d)
+\end{equation}
+without using gradient information. It assumes that the line-restricted objective is \gls{Unimodal} on the interval $[a,b]$.
+
+The method uses the constant
+\begin{equation}
+r = \frac{3 - \sqrt{5}}{2} \approx 0.381966.
+\end{equation}
+This choice allows one previously computed function value to be reused after each interval reduction. As a result, only one new function evaluation is needed per iteration.
+
+The interior points are initialized as
+\begin{equation}
+x_1 = a + r(b-a), \qquad x_2 = b - r(b-a),
+\end{equation}
+with corresponding evaluations
+\begin{equation}
+f_1 = f(x + x_1 d), \qquad f_2 = f(x + x_2 d).
+\end{equation}
+
+The logic is:
+\begin{itemize}
+    \item If $f_1 < f_2$, the minimum is kept in the interval $[a, x_2]$.
+    \item Otherwise, it is kept in the interval $[x_1, b]$.
+\end{itemize}
+After the interval is reduced, one of the old test points is reused and only one new point is computed. This is the efficiency advantage of the method.
+
+The implementation follows the standard pattern:
+\begin{lstlisting}[language=Python]
+a = 0.0
+b = initial_step
+x1 = a + golden_ratio * (b - a)
+x2 = b - golden_ratio * (b - a)
+
+f1 = f(x + x1 * direction)
+f2 = f(x + x2 * direction)
+
+for _ in range(max_iters):
+    if abs(b - a) < tol:
+        break
+
+    if f1 < f2:
+        b = x2
+        x2 = x1
+        f2 = f1
+        x1 = a + golden_ratio * (b - a)
+        f1 = f(x + x1 * direction)
+    else:
+        a = x1
+        x1 = x2
+        f1 = f2
+        x2 = b - golden_ratio * (b - a)
+        f2 = f(x + x2 * direction)
+\end{lstlisting}
+
+This method is useful when derivatives are unavailable or expensive, but the objective behaves reasonably well along the search direction.
+
+% ==========================================================
+\chapter{Constrained Optimization}
+
+The system supports equality constraints $g(x)=0$ using two distinct numerical strategies.
+
+\section{Penalty Method}
+
+The constrained problem is converted into an unconstrained one by adding a quadratic penalty:
+\begin{equation}
+P(x;\rho) = f(x) + \rho (g(x))^2,
+\end{equation}
+where $\rho > 0$ controls the severity of the penalty.
+
+Its gradient is
+\begin{equation}
+\nabla P(x) = \nabla f(x) + 2\rho g(x)\nabla g(x).
+\end{equation}
+
+In the implementation, $\rho$ is increased when the constraint violation remains too large. This forces the optimizer toward the feasible region where $g(x)\approx 0$.
+
+\section{Lagrange Multipliers}
+
+The standard Lagrangian is
+\begin{equation}
+L(x,\lambda) = f(x) + \lambda g(x).
+\end{equation}
+Its gradient with respect to $x$ is
+\begin{equation}
+\nabla_x L(x,\lambda) = \nabla f(x) + \lambda \nabla g(x).
+\end{equation}
+
+The method uses a primal-dual update:
+\begin{lstlisting}[language=Python]
+x = x - alpha * (grad_f + lambda * grad_g)
+lambda = lambda + alpha * g(x)
+\end{lstlisting}
+
+The primal update minimizes the objective while accounting for the constraint force induced by $\lambda \nabla g(x)$. The dual update increases the multiplier when the constraint is violated and decreases it when the iterate crosses the constraint surface.
+
+In addition to the primal-dual steps, the implementation includes a feasibility correction step. When the violation is large, the iterate is pushed directly toward the constraint manifold:
+\begin{equation}
+x \leftarrow x - \eta\, g(x)\frac{\nabla g(x)}{\|\nabla g(x)\|}.
+\end{equation}
+This correction moves the iterate along the normal direction of the constraint surface and improves robustness when the initialization is far from feasibility.
+
+% ==========================================================
+\chapter{Visualization Architecture}
+
+\section{Vectorized Evaluation}
+
+Rendering 3D surfaces and 2D contours requires evaluating the objective on a large mesh. The implementation attempts a vectorized call first and falls back to a pointwise loop if necessary:
+\begin{lstlisting}[language=Python]
+def evaluate_function(f, X, Y):
+    try:
+        return f(np.stack([X, Y], axis=0))
+    except:
+        Z = np.zeros_like(X)
+        for i in range(X.shape[0]):
+            for j in range(X.shape[1]):
+                Z[i,j] = f(np.array([X[i,j], Y[i,j]]))
+        return Z
+\end{lstlisting}
+
+\section{Divergence Handling}
+
+Optimization runs can diverge on non-convex or poorly scaled landscapes. To prevent the visualization from being dominated by outliers, the system uses:
+\begin{itemize}
+    \item Z-axis clipping to the bounds of the objective mesh.
+    \item Removal of NaN and Inf trajectory points.
+\end{itemize}
+
+% ==========================================================
+\chapter{Experimental Observations}
+
+\begin{itemize}
+    \item Conditioning strongly affects gradient descent convergence speed.
+    \item High momentum causes oscillatory overshoot.
+    \item Newton's method can diverge when the Hessian is close to singular.
+    \item Multistart experiments reveal strong initialization sensitivity on non-convex landscapes.
+\end{itemize}
+
+% ==========================================================
+\chapter{Conclusion}
+
+The Optimization Dynamics Laboratory provides a modular environment for studying optimization dynamics through direct numerical simulation. Its value lies in the combination of transparent algorithms, explicit numerical approximations, and diagnostic visualizations that make optimization behavior easy to inspect.
+
+\printglossaries
+
+\end{document}
