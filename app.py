@@ -1,5 +1,27 @@
 """Streamlit application for interactive optimization-dynamics exploration."""
 
+from visualization.trajectories import VisualizationRunner
+from visualization.contours import ContourPlotter
+from optimizers import (
+    GradientDescent,
+    GradientDescentWithLineSearch,
+    MomentumGD,
+    MomentumWithLineSearch,
+    Newton,
+    SGD,
+)
+from functions import IllConditioned, NonConvex, Quadratic, Saddle
+from experiments.failure_modes import FailureModes
+from experiments.initialization_sensitivity import InitializationSensitivity
+from experiments.conditioning_effects import ConditioningEffects
+from experiments.compare_optimizers import MultiStartAnalyzer
+from dynamics.trajectory import TrajectoryRunner
+from dynamics.constrained import (
+    LagrangeMultiplierMethod,
+    PenaltyMethod,
+    create_circle_constraint_problem,
+    create_ellipse_constraint_problem,
+)
 from datetime import datetime
 
 import matplotlib
@@ -11,28 +33,6 @@ import streamlit as st
 # Disable mathtext for axes formatters to avoid \mathdefault errors in some environments
 matplotlib.rcParams['axes.formatter.use_mathtext'] = False
 matplotlib.rcParams['mathtext.default'] = 'regular'
-
-from dynamics.constrained import (
-    LagrangeMultiplierMethod,
-    PenaltyMethod,
-    create_circle_constraint_problem,
-    create_ellipse_constraint_problem,
-)
-from dynamics.trajectory import TrajectoryRunner
-from experiments.compare_optimizers import MultiStartAnalyzer
-from experiments.conditioning_effects import ConditioningEffects
-from experiments.initialization_sensitivity import InitializationSensitivity
-from experiments.failure_modes import FailureModes
-from functions import IllConditioned, NonConvex, Quadratic, Saddle
-from optimizers import (
-    GradientDescent,
-    GradientDescentWithLineSearch,
-    MomentumGD,
-    MomentumWithLineSearch,
-    Newton,
-)
-from visualization.contours import ContourPlotter
-from visualization.trajectories import VisualizationRunner
 
 
 st.set_page_config(
@@ -67,10 +67,13 @@ def build_unconstrained_optimizers(
     use_newton,
     use_gd_line_search,
     use_momentum_line_search,
+    use_sgd,
     step_size,
     beta,
     line_search_method,
     initial_step,
+    sgd_step_size,
+    sgd_batch_size,
 ):
     """Create optimizer instances selected in the sidebar."""
     optimizers = []
@@ -107,6 +110,15 @@ def build_unconstrained_optimizers(
         )
         names.append(f"Momentum + LS ({line_search_method}, β={beta})")
 
+    if use_sgd:
+        optimizers.append(
+            SGD(
+                step_size=sgd_step_size,
+                batch_size=sgd_batch_size,
+            )
+        )
+        names.append(f"SGD (η={sgd_step_size}, batch={sgd_batch_size})")
+
     return optimizers, names
 
 
@@ -121,9 +133,12 @@ def plot_constrained_problem(problem, x_history, x_range, y_range, title):
     ax0 = axes[0]
     contourf = ax0.contourf(X, Y, Z, levels=25, cmap="viridis", alpha=0.85)
     ax0.contour(X, Y, G, levels=[0], colors="tomato", linewidths=2.5)
-    ax0.plot(x_history[:, 0], x_history[:, 1], "o-", color="white", linewidth=2, markersize=4)
-    ax0.plot(x_history[0, 0], x_history[0, 1], "o", color="deepskyblue", markersize=8, markeredgecolor="black")
-    ax0.plot(x_history[-1, 0], x_history[-1, 1], "s", color="gold", markersize=8, markeredgecolor="black")
+    ax0.plot(x_history[:, 0], x_history[:, 1], "o-",
+             color="white", linewidth=2, markersize=4)
+    ax0.plot(x_history[0, 0], x_history[0, 1], "o",
+             color="deepskyblue", markersize=8, markeredgecolor="black")
+    ax0.plot(x_history[-1, 0], x_history[-1, 1], "s",
+             color="gold", markersize=8, markeredgecolor="black")
     plt.colorbar(contourf, ax=ax0, label="f(x)")
     ax0.set_title("Objective + Constraint", fontweight="bold")
     ax0.set_xlabel("x₀")
@@ -137,15 +152,17 @@ def plot_constrained_problem(problem, x_history, x_range, y_range, title):
     iterations = np.arange(len(x_history))
     f_vals = np.array([problem.f(x) for x in x_history])
     g_vals = np.array([abs(problem.g(x)) for x in x_history])
-    ax1.semilogy(iterations, np.maximum(f_vals, 1e-12), "o-", label="f(x)", linewidth=2)
-    ax1.semilogy(iterations, np.maximum(g_vals, 1e-12), "s-", label="|g(x)|", linewidth=2)
+    ax1.semilogy(iterations, np.maximum(f_vals, 1e-12),
+                 "o-", label="f(x)", linewidth=2)
+    ax1.semilogy(iterations, np.maximum(g_vals, 1e-12),
+                 "s-", label="|g(x)|", linewidth=2)
     ax1.set_title("Convergence", fontweight="bold")
     ax1.set_xlabel("Iteration")
     ax1.set_ylabel("Value [log scale]")
-    
+
     from matplotlib.ticker import LogFormatter
     ax1.yaxis.set_major_formatter(LogFormatter())
-    
+
     ax1.legend()
     ax1.grid(True, alpha=0.3, which="both")
 
@@ -171,12 +188,15 @@ def render_trajectory_dashboard(trajectories, optimizer_names, selected_function
             with left:
                 st.metric("Steps", traj.n_steps)
                 st.metric("f(x₀)", f"{traj.f_initial:.4f}")
-                st.metric("||∇f(x₀)||", f"{traj.diagnostics['gradient_norms'][0]:.2e}")
+                st.metric("||∇f(x₀)||",
+                          f"{traj.diagnostics['gradient_norms'][0]:.2e}")
             with right:
-                st.metric("f(xf)", f"{traj.f_final:.4f}", delta=f"{traj.f_final - traj.f_initial:.4f}")
+                st.metric("f(xf)", f"{traj.f_final:.4f}",
+                          delta=f"{traj.f_final - traj.f_initial:.4f}")
                 st.metric("||∇f(xf)||", f"{traj.grad_norm_final:.2e}")
                 cond_num_final = traj.diagnostics["condition_numbers"][-1]
-                st.metric("κ(Hf)", f"{cond_num_final:.2e}" if np.isfinite(cond_num_final) else "∞")
+                st.metric("κ(Hf)", f"{cond_num_final:.2e}" if np.isfinite(
+                    cond_num_final) else "∞")
 
             st.write("**Hessian eigenvalues (final):**")
             st.write(traj.diagnostics["eigenvalues"][-1])
@@ -197,21 +217,25 @@ def render_trajectory_dashboard(trajectories, optimizer_names, selected_function
             "||∇f(x)||": selected_traj.diagnostics["gradient_norms"],
             "κ(H)": selected_traj.diagnostics["condition_numbers"],
         }
-        st.dataframe(pd.DataFrame(diag_data), use_container_width=True, height=380)
+        st.dataframe(pd.DataFrame(diag_data),
+                     use_container_width=True, height=380)
 
         st.subheader("Hessian Eigenvalue Evolution")
         eigenvalues_over_time = selected_traj.diagnostics["eigenvalues"]
         fig_eigvals, ax = plt.subplots(figsize=(10, 4))
         for dim in range(2):
-            eigvals_dim = [ev[dim] if len(ev) > dim else np.nan for ev in eigenvalues_over_time]
-            ax.semilogy(range(len(eigenvalues_over_time)), np.abs(eigvals_dim), "o-", markersize=3, label=f"λ_{dim + 1}")
+            eigvals_dim = [ev[dim] if len(
+                ev) > dim else np.nan for ev in eigenvalues_over_time]
+            ax.semilogy(range(len(eigenvalues_over_time)), np.abs(
+                eigvals_dim), "o-", markersize=3, label=f"λ_{dim + 1}")
         ax.set_xlabel("Iteration")
         ax.set_ylabel("|λᵢ|")
-        
+
         from matplotlib.ticker import LogFormatter
         ax.yaxis.set_major_formatter(LogFormatter())
-        
-        ax.set_title(f"Hessian Eigenvalues - {optimizer_names[selected_traj_idx]}")
+
+        ax.set_title(
+            f"Hessian Eigenvalues - {optimizer_names[selected_traj_idx]}")
         ax.legend()
         ax.grid(True, alpha=0.3)
         st.pyplot(fig_eigvals, use_container_width=True)
@@ -240,7 +264,8 @@ def render_trajectory_dashboard(trajectories, optimizer_names, selected_function
             if fig_3d is not None:
                 st.plotly_chart(fig_3d, use_container_width=True)
             else:
-                st.warning("3D visualization not available in this environment.")
+                st.warning(
+                    "3D visualization not available in this environment.")
         except Exception as exc:
             st.error(f"Error creating 3D plot: {exc}")
 
@@ -285,9 +310,16 @@ def render_unconstrained_workspace():
     st.sidebar.subheader("Optimizer Settings")
     use_gd = st.sidebar.checkbox("Gradient Descent", value=True)
     use_momentum = st.sidebar.checkbox("Momentum GD", value=True)
-    use_newton = st.sidebar.checkbox("Newton's Method", value=False, help="Newton can diverge on some functions")
+    use_newton = st.sidebar.checkbox(
+        "Newton's Method", value=False, help="Newton can diverge on some functions")
     use_gd_line_search = st.sidebar.checkbox("GD + Line Search", value=False)
-    use_momentum_line_search = st.sidebar.checkbox("Momentum + Line Search", value=False)
+    use_momentum_line_search = st.sidebar.checkbox(
+        "Momentum + Line Search", value=False)
+    use_sgd = st.sidebar.checkbox(
+        "SGD",
+        value=False,
+        help="Mini-batch SGD over sampled objective components",
+    )
 
     if use_gd or use_momentum:
         step_size = st.sidebar.slider(
@@ -313,6 +345,27 @@ def render_unconstrained_workspace():
     else:
         beta = 0.9
 
+    if use_sgd:
+        sgd_step_size = st.sidebar.slider(
+            "SGD step size",
+            0.001,
+            0.5,
+            0.01,
+            step=0.001,
+            help="Learning rate for SGD",
+        )
+        sgd_batch_size = st.sidebar.slider(
+            "SGD batch size",
+            1,
+            128,
+            10,
+            step=1,
+            help="Number of component objectives sampled per SGD update",
+        )
+    else:
+        sgd_step_size = 0.01
+        sgd_batch_size = 10
+
     if use_gd_line_search or use_momentum_line_search:
         line_search_method = st.sidebar.selectbox(
             "Line search method",
@@ -330,13 +383,16 @@ def render_unconstrained_workspace():
         initial_step = 1.0
 
     n_steps = st.sidebar.slider("Max steps", 10, 500, 200, step=10)
-    tol = st.sidebar.slider("Convergence tolerance", 1e-8, 1e-3, 1e-6, format="%.0e")
+    tol = st.sidebar.slider("Convergence tolerance",
+                            1e-8, 1e-3, 1e-6, format="%.0e")
 
     st.sidebar.subheader("Initial Point")
     x0_mode = st.sidebar.radio("Starting point", ["Manual", "Random"])
     if x0_mode == "Manual":
-        x0_0 = st.sidebar.slider("x₀[0]", x_range[0], x_range[1], 3.0, step=0.1)
-        x0_1 = st.sidebar.slider("x₀[1]", y_range[0], y_range[1], -4.0, step=0.1)
+        x0_0 = st.sidebar.slider(
+            "x₀[0]", x_range[0], x_range[1], 3.0, step=0.1)
+        x0_1 = st.sidebar.slider(
+            "x₀[1]", y_range[0], y_range[1], -4.0, step=0.1)
         x0 = [x0_0, x0_1]
     else:
         x0 = [
@@ -351,10 +407,13 @@ def render_unconstrained_workspace():
         use_newton,
         use_gd_line_search,
         use_momentum_line_search,
+        use_sgd,
         step_size,
         beta,
         line_search_method,
         initial_step,
+        sgd_step_size,
+        sgd_batch_size,
     )
 
     if not optimizers:
@@ -370,7 +429,8 @@ def render_unconstrained_workspace():
             tol=tol,
         )
 
-    render_trajectory_dashboard(trajectories, optimizer_names, selected_function, x_range, y_range)
+    render_trajectory_dashboard(
+        trajectories, optimizer_names, selected_function, x_range, y_range)
 
 
 def render_constrained_workspace():
@@ -392,13 +452,17 @@ def render_constrained_workspace():
         x_range = (-3.0, 3.0)
         y_range = (-2.5, 2.5)
 
-    method = st.sidebar.selectbox("Method", ["Lagrange Multipliers", "Penalty Method"])
-    step_size = st.sidebar.slider("Primal step size", 0.001, 0.2, 0.01, step=0.001, format="%.3f")
+    method = st.sidebar.selectbox(
+        "Method", ["Lagrange Multipliers", "Penalty Method"])
+    step_size = st.sidebar.slider(
+        "Primal step size", 0.001, 0.2, 0.01, step=0.001, format="%.3f")
     steps = st.sidebar.slider("Max steps", 10, 500, 150, step=10)
     tol = st.sidebar.slider("Tolerance", 1e-8, 1e-3, 1e-6, format="%.0e")
 
-    x0_0 = st.sidebar.slider("x₀[0]", x_range[0], x_range[1], float(x0_default[0]), step=0.1)
-    x0_1 = st.sidebar.slider("x₀[1]", y_range[0], y_range[1], float(x0_default[1]), step=0.1)
+    x0_0 = st.sidebar.slider(
+        "x₀[0]", x_range[0], x_range[1], float(x0_default[0]), step=0.1)
+    x0_1 = st.sidebar.slider(
+        "x₀[1]", y_range[0], y_range[1], float(x0_default[1]), step=0.1)
     x0 = np.array([x0_0, x0_1], dtype=float)
 
     if method == "Lagrange Multipliers":
@@ -529,7 +593,8 @@ def render_experiments_workspace():
             st.write(result.summary())
 
     elif experiment == "Conditioning Effects":
-        step_size = st.sidebar.slider("Step size", 0.001, 0.2, 0.05, step=0.001, format="%.3f")
+        step_size = st.sidebar.slider(
+            "Step size", 0.001, 0.2, 0.05, step=0.001, format="%.3f")
         n_steps = st.sidebar.slider("Max steps", 50, 500, 200, step=10)
 
         results = ConditioningEffects.compare_conditioning_levels(
@@ -551,7 +616,8 @@ def render_experiments_workspace():
                         "||∇f(xf)||": traj.grad_norm_final,
                     }
                 )
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows),
+                     use_container_width=True, hide_index=True)
 
     elif experiment == "Multi-Start Analysis":
         optimizer_name = st.sidebar.selectbox(
@@ -559,8 +625,10 @@ def render_experiments_workspace():
             ["Gradient Descent", "Momentum GD", "GD + Line Search"],
         )
         n_points = st.sidebar.slider("Starting points", 4, 64, 16, step=1)
-        x_range = st.sidebar.slider("x₀ range", -5.0, 5.0, (-3.0, 3.0), step=0.5)
-        y_range = st.sidebar.slider("x₁ range", -5.0, 5.0, (-2.0, 4.0), step=0.5)
+        x_range = st.sidebar.slider(
+            "x₀ range", -5.0, 5.0, (-3.0, 3.0), step=0.5)
+        y_range = st.sidebar.slider(
+            "x₁ range", -5.0, 5.0, (-2.0, 4.0), step=0.5)
         n_steps = st.sidebar.slider("Max steps", 50, 500, 200, step=10)
         tol = st.sidebar.slider("Tolerance", 1e-8, 1e-3, 1e-6, format="%.0e")
         seed = st.sidebar.number_input("Seed", value=42, step=1)
@@ -618,13 +686,15 @@ def render_experiments_workspace():
                     "Steps": traj.n_steps,
                 }
             )
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows),
+                     use_container_width=True, hide_index=True)
 
     elif experiment == "Initialization Sensitivity":
         n_starts = st.sidebar.slider("Starting points", 4, 32, 16, step=1)
 
         with st.spinner("Running initialization sensitivity analysis..."):
-            results = InitializationSensitivity.analyze_nonconvex_function(n_starts=n_starts, save_dir=None)
+            results = InitializationSensitivity.analyze_nonconvex_function(
+                n_starts=n_starts, save_dir=None)
 
         st.pyplot(results["figure"], use_container_width=True)
 

@@ -10,7 +10,21 @@ class Newton(Optimizer):
     """Second-order optimizer using local quadratic approximation."""
 
     def optimize(self, f, x0, steps=100, tol=1e-6):
-        """Run Newton's method and return the optimization trajectory."""
+        """Run Newton's method and return the optimization trajectory.
+
+        Args:
+            f: Scalar objective function f(x) -> R.
+            x0: Initial point as a list or array of coordinates.
+            steps: Maximum number of optimization iterations. Defaults to 100.
+            tol: Convergence tolerance on the gradient norm. The algorithm
+                 stops early if ||grad|| < tol. Defaults to 1e-6.
+
+        Returns:
+            numpy.ndarray of shape (n_steps, n_dims) containing the sequence
+            of iterates, starting from x0. Returns early if the Hessian is
+            singular (np.linalg.LinAlgError) or the gradient norm falls
+            below tol.
+        """
         x = np.array(x0, float)
         history = [x.copy()]
 

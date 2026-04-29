@@ -7,6 +7,7 @@ from optimizers.newton import Newton
 from optimizers.line_search import LineSearch
 from optimizers.gradient_descent_line_search import GradientDescentWithLineSearch
 from optimizers.momentum_line_search import MomentumWithLineSearch
+from optimizers.sgd import SGD
 
 __all__ = [
     'Optimizer',
@@ -15,5 +16,6 @@ __all__ = [
     'Newton',
     'GradientDescentWithLineSearch',
     'MomentumWithLineSearch',
+    'SGD',
     'LineSearch'
 ]

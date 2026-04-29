@@ -25,7 +25,7 @@ print(traj.summary())
 
 ```python
 from functions import NonConvex
-from optimizers import GradientDescent, MomentumGD, Newton
+from optimizers import GradientDescent, MomentumGD, Newton, SGD
 from dynamics import TrajectoryRunner
 
 function = NonConvex()
@@ -33,6 +33,7 @@ optimizers = [
     GradientDescent(step_size=0.1),
     MomentumGD(step_size=0.1, beta=0.9),
     Newton(),
+    SGD(step_size=0.01, batch_size=10),
 ]
 
 trajectories = TrajectoryRunner.run_comparison(
@@ -45,6 +46,20 @@ trajectories = TrajectoryRunner.run_comparison(
 
 for traj in trajectories:
     print(traj.optimizer_name, traj.n_steps, traj.f_final, traj.grad_norm_final)
+```
+
+## Mini-batch SGD
+
+```python
+from functions import Quadratic
+from optimizers import SGD
+
+function = Quadratic()
+components = [function.f] * 16
+optimizer = SGD(step_size=0.01, batch_size=8, seed=42)
+
+path = optimizer.optimize(components, x0=[3.0, -4.0], steps=100)
+print(path[-1], function.f(path[-1]))
 ```
 
 ## Fixed step vs line search

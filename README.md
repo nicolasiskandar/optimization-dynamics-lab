@@ -5,7 +5,7 @@ Optimization Dynamics Laboratory is a from-scratch Python toolkit for studying o
 It includes:
 
 - Numerical gradient and Hessian estimation
-- Unconstrained optimizers (Gradient Descent, Momentum, Newton, line-search variants)
+- Unconstrained optimizers (Gradient Descent, Momentum, Newton, mini-batch SGD, line-search variants)
 - Equality-constrained solvers (Lagrange multiplier and quadratic penalty methods)
 - Trajectory diagnostics (loss, gradient norm, Hessian eigenvalues, condition number)
 - Visualization utilities (contours, vector fields, loss curves, 3D surfaces)
@@ -46,23 +46,27 @@ python -c "from experiments.failure_modes import FailureModes; FailureModes.crea
 
 ## Testing
 
-Tests are script-style files in `tests/` (they execute assertions at module level).
+The repository uses `pytest` for tests covering:
 
-Run one test script:
+- numerical gradient and Hessian approximations
+- optimizer convergence and documented instability cases
+- line-search behavior
+- trajectory diagnostics helpers
+- constrained optimization solvers
+
+`SGD` now operates on a list of component objectives. In the visualization and
+trajectory helpers, single analytical objectives are adapted into repeated
+component lists so SGD can still be compared against the other optimizers.
+
+Run the full suite:
 
 ```bash
-PYTHONPATH=. python tests/test_line_search.py
+pytest
 ```
 
-Run all scripts:
+Run a focused file or test:
 
 ```bash
-PYTHONPATH=. python tests/test_gradient.py
-PYTHONPATH=. python tests/test_hessian.py
-PYTHONPATH=. python tests/test_gradient_descent.py
-PYTHONPATH=. python tests/test_momentum.py
-PYTHONPATH=. python tests/test_newton.py
-PYTHONPATH=. python tests/test_trajectory.py
-PYTHONPATH=. python tests/test_line_search.py
-PYTHONPATH=. python tests/test_constrained.py
+pytest tests/test_line_search.py
+pytest tests/test_newton.py -k singular
 ```

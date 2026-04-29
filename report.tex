@@ -106,6 +106,7 @@
 \newglossaryentry{MGD}{name=MGD, description={Momentum Gradient Descent}, first={Momentum Gradient Descent (MGD)}}
 \newglossaryentry{TR}{name=TR, description={TrajectoryRunner}, first={TrajectoryRunner (TR)}}
 \newglossaryentry{Diag}{name=Diag, description={Diagnostics}, first={Diagnostics (Diag)}}
+\newglossaryentry{SGD}{name=SGD, description={Stochastic Gradient Descent}, first={Stochastic Gradient Descent (SGD)}}
 
 % Added glossary terms
 \newglossaryentry{Armijo}{
@@ -184,10 +185,13 @@ The laboratory is a modular system separating objective functions, optimizers, d
 The \gls{TR} class manages execution of optimization runs and stores the resulting optimization trajectory together with diagnostics.
 
 \begin{lstlisting}[language=Python]
-trajectory_array = optimizer.optimize(function.f, x0, steps=steps, tol=tol)
+objective = TrajectoryRunner._build_optimizer_objective(optimizer, function)
+trajectory_array = optimizer.optimize(objective, x0, steps=steps, tol=tol)
 diagnostics_data = Diagnostics.compute_trajectory_diagnostics(function.f, trajectory_array)
 trajectory = Trajectory(function, optimizer_name, x0, trajectory_array, diagnostics_data)
 \end{lstlisting}
+
+Most optimizers consume a scalar callable $f(x)$. The current \gls{SGD} implementation instead operates on a finite-sum objective represented as a list of component functions. To keep the visualization and comparison pipeline uniform, \gls{TR} adapts analytical demo objectives into repeated component lists when an \gls{SGD} instance is used. This preserves a single execution interface for plotting, diagnostics, and experiment modules.
 
 Batch utilities include:
 \begin{itemize}
@@ -224,22 +228,155 @@ but the implementation reuses the gradient routine directly. This makes the code
 % ==========================================================
 \chapter{Optimization Algorithms}
 
+\section{Gradient Descent}
+
+Gradient descent is a first-order optimization method that updates parameters in the direction of steepest descent of the objective function.
+
+Given an objective $f(x)$, the update rule is
+\begin{equation}
+x_{k+1} = x_k - \eta \nabla f(x_k),
+\end{equation}
+where $\eta > 0$ is a fixed step size.
+
+The implementation uses a finite-difference gradient approximation and stops early if the gradient norm satisfies
+\begin{equation}
+\|\nabla f(x_k)\| < \text{tol}.
+\end{equation}
+
+\begin{lstlisting}[language=Python]
+grad = Gradient.get_grad(f, x)
+x = x - step_size * grad
+\end{lstlisting}
+
+\subsection*{Remarks}
+\begin{itemize}
+    \item Uses a fixed learning rate throughout optimization.
+    \item Convergence speed depends strongly on step size choice.
+    \item Early stopping is based on gradient norm threshold.
+\end{itemize}
+
 \section{Momentum Gradient Descent}
 
-Momentum gradient descent augments the basic gradient update with a velocity term:
+Momentum gradient descent extends standard gradient descent by introducing a velocity term that accumulates past gradients, improving convergence on ill-conditioned problems.
+
+The velocity update is given by
+\begin{equation}
+v_{k+1} = \beta v_k + \nabla f(x_k),
+\end{equation}
+and the parameter update is
+\begin{equation}
+x_{k+1} = x_k - \eta v_{k+1},
+\end{equation}
+where $\eta > 0$ is the step size and $\beta \in [0,1)$ controls the decay of past gradients.
+
+The implementation stops early when
+\begin{equation}
+\|\nabla f(x_k)\| < \text{tol}.
+\end{equation}
+
 \begin{lstlisting}[language=Python]
-v = beta * v - step_size * grad
-x = x + v
+v = beta * v + grad
+x = x - step_size * v
 \end{lstlisting}
-The parameter $\beta \in [0,1)$ determines how much of the previous direction is retained. This reduces zig-zag motion on ill-conditioned objective surfaces.
+
+\subsection*{Remarks}
+\begin{itemize}
+    \item The velocity term acts as an exponential moving average of gradients.
+    \item Larger $\beta$ increases inertia and can accelerate convergence in shallow valleys.
+    \item Too large $\beta$ may introduce oscillations or overshooting.
+\end{itemize}
 
 \section{Newton's Method}
 
-Newton's method uses the local quadratic model of the objective. The update direction $\Delta x$ is obtained by solving
+Newton's method is a second-order optimization algorithm that uses both gradient and Hessian information to construct a local quadratic approximation of the objective function.
+
+The update rule is
 \begin{equation}
-H(x_k)\Delta x = -\nabla f(x_k).
+x_{k+1} = x_k - H(x_k)^{-1}\nabla f(x_k),
 \end{equation}
-The implementation uses \texttt{np.linalg.solve} rather than forming an explicit inverse. This is numerically preferable because it solves the linear system directly and is more stable when the Hessian is poorly conditioned.
+where $H(x_k)$ is the Hessian matrix of second derivatives.
+
+In implementation, the Newton step is computed by solving the linear system
+\begin{equation}
+H(x_k) p_k = \nabla f(x_k),
+\end{equation}
+and updating
+\begin{equation}
+x_{k+1} = x_k - p_k.
+\end{equation}
+
+The algorithm terminates early if
+\begin{equation}
+\|\nabla f(x_k)\| < \text{tol},
+\end{equation}
+or if the Hessian is singular or ill-conditioned.
+
+\begin{lstlisting}[language=Python]
+H = Hessian.get_hessian(f, x)
+step = np.linalg.solve(H, grad)
+x = x - step
+\end{lstlisting}
+
+\subsection*{Remarks}
+\begin{itemize}
+    \item Uses second-order curvature information for faster local convergence.
+    \item The linear system is solved directly for numerical stability.
+    \item May fail or break down when the Hessian is singular or indefinite.
+\end{itemize}
+
+\section{Mini-Batch Stochastic Gradient Descent with Gaussian Noise}
+
+The current implementation follows mini-batch stochastic gradient descent with additive Gaussian noise on the gradient estimate. The method is defined on a finite-sum objective of the form
+\begin{equation}
+F(x) = \frac{1}{N}\sum_{i=1}^{N} f_i(x),
+\end{equation}
+where each $f_i$ is a component function.
+
+At each iteration $k$, a mini-batch $B_k \subset \{1,\dots,N\}$ of size $b$ is sampled uniformly without replacement. The corresponding mini-batch gradient estimator is
+\begin{equation}
+g_k = \frac{1}{|B_k|}\sum_{i \in B_k} \nabla f_i(x_k).
+\end{equation}
+
+In addition to the stochastic gradient estimate, isotropic Gaussian noise is added:
+\begin{equation}
+\epsilon_k \sim \mathcal{N}(0, \sigma^2 I),
+\end{equation}
+where $\sigma = \texttt{noise\_std}$ controls the noise magnitude.
+
+The parameter update rule is then
+\begin{equation}
+x_{k+1} = x_k - \eta (g_k + \epsilon_k),
+\end{equation}
+where $\eta > 0$ is the step size.
+
+\begin{lstlisting}[language=Python]
+batch_indices = rng.choice(n_functions, size=batch_size, replace=False)
+
+batch_grads = []
+for idx in batch_indices:
+    fi = functions[idx]
+    grad = Gradient.get_grad(fi, x)
+    batch_grads.append(grad)
+
+batch_grad = np.mean(batch_grads, axis=0)
+
+noise = rng.normal(loc=0.0, scale=noise_std, size=x.shape)
+
+x = x - step_size * (batch_grad + noise)
+\end{lstlisting}
+
+\subsection*{Remarks}
+
+\begin{itemize}
+    \item When $|B_k| = N$, the method reduces to full-batch gradient descent with additive Gaussian perturbations.
+    \item Stochasticity arises from both minibatch sampling and injected Gaussian noise.
+    \item The noise term is isotropic and independent across iterations.
+    \item The stopping criterion is based on the norm of the mini-batch gradient:
+    \begin{equation}
+    \|\; g_k \;\| < \text{tol},
+    \end{equation}
+    which does not include the noise term and may be sensitive to sampling variability.
+\end{itemize}
 
 % ==========================================================
 \chapter{Line Search Methods}
@@ -392,6 +529,8 @@ This correction moves the iterate along the normal direction of the constraint s
 % ==========================================================
 \chapter{Visualization Architecture}
 
+The visualization layer is intentionally non-authoritative: it renders trajectories and diagnostics produced by the execution engine rather than recomputing optimizer logic itself. This separation matters for \gls{SGD}, where the finite-sum objective handling is resolved inside \gls{TR} before any contour, vector-field, loss, or surface plot is created.
+
 \section{Vectorized Evaluation}
 
 Rendering 3D surfaces and 2D contours requires evaluating the objective on a large mesh. The implementation attempts a vectorized call first and falls back to a pointwise loop if necessary:
@@ -422,6 +561,7 @@ Optimization runs can diverge on non-convex or poorly scaled landscapes. To prev
     \item Conditioning strongly affects gradient descent convergence speed.
     \item High momentum causes oscillatory overshoot.
     \item Newton's method can diverge when the Hessian is close to singular.
+    \item Mini-batch \gls{SGD} behavior depends on the component-function sampling process and becomes deterministic when the full batch is used.
     \item Multistart experiments reveal strong initialization sensitivity on non-convex landscapes.
 \end{itemize}
 

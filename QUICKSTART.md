@@ -20,17 +20,17 @@ Open `http://localhost:8501`.
 python demo.py
 ```
 
-### (Optional) Execute validation scripts
+### (Optional) Run the test suite
 
 ```bash
-PYTHONPATH=. python tests/test_gradient.py
-PYTHONPATH=. python tests/test_hessian.py
-PYTHONPATH=. python tests/test_gradient_descent.py
-PYTHONPATH=. python tests/test_momentum.py
-PYTHONPATH=. python tests/test_newton.py
-PYTHONPATH=. python tests/test_trajectory.py
-PYTHONPATH=. python tests/test_line_search.py
-PYTHONPATH=. python tests/test_constrained.py
+pytest
+```
+
+To run a subset:
+
+```bash
+pytest tests/test_sgd.py
+pytest tests/test_constrained.py -k penalty
 ```
 
 ## 4) Generate failure mode plots
@@ -45,7 +45,7 @@ Generated figures are written to `failure_modes/`.
 
 ```python
 from functions import IllConditioned
-from optimizers import GradientDescent, MomentumGD, Newton
+from optimizers import GradientDescent, MomentumGD, Newton, SGD
 from dynamics import TrajectoryRunner
 
 function = IllConditioned(a=1, b=100)
@@ -53,6 +53,7 @@ optimizers = [
     GradientDescent(step_size=0.05),
     MomentumGD(step_size=0.05, beta=0.9),
     Newton(),
+    SGD(step_size=0.01, batch_size=10),
 ]
 
 trajectories = TrajectoryRunner.run_comparison(

@@ -20,6 +20,7 @@ All function classes implement `Function2D` from `functions/base.py` and support
 ### Unconstrained optimizers
 - `GradientDescent`
 - `MomentumGD`
+- `SGD` (mini-batch stochastic gradient descent over component objectives)
 - `Newton`
 - `GradientDescentWithLineSearch` (backtracking / golden-section)
 - `MomentumWithLineSearch` (backtracking / golden-section)
@@ -56,20 +57,24 @@ Implemented under `dynamics/constrained/`:
 - `app.py`: Streamlit UI for function/optimizer selection, diagnostics, 2D and optional 3D plotting, CSV export
 - `demo.py`: command-line walkthrough of all major capabilities
 
-### Validation scripts
-The repository includes script-style checks in `tests/`:
+For analytical functions routed through the shared trajectory helpers, SGD is
+fed a repeated list of the selected objective so it remains compatible with the
+generic visualization and comparison flows.
+
+### Test suite
+The repository includes a `pytest` suite in `tests/`:
 - `test_gradient.py`
 - `test_hessian.py`
 - `test_gradient_descent.py`
 - `test_momentum.py`
+- `test_sgd.py`
 - `test_newton.py`
 - `test_line_search.py`
 - `test_trajectory.py`
 - `test_constrained.py`
 
-Run with `PYTHONPATH=. python tests/<file>.py`.
+Run with `pytest` or target specific modules with `pytest tests/<file>.py`.
 
 ## Current Notes
-- Tests are executable scripts, not pytest-style test functions.
 - Newton can fail or terminate early when Hessians are singular/indefinite in some regions.
 - Several plotting and experiment workflows are intentionally compute-heavy for clarity of analysis.

@@ -2,6 +2,7 @@
 
 import numpy as np
 from dynamics.diagnostics import Diagnostics
+from optimizers.sgd import SGD
 
 
 class Trajectory:
@@ -64,6 +65,16 @@ class TrajectoryRunner:
     """Orchestrate optimization runs and collect trajectories."""
 
     @staticmethod
+    def _build_optimizer_objective(optimizer, function):
+        """Adapt the function payload to optimizers with non-standard inputs."""
+        if isinstance(optimizer, SGD):
+            # Analytical demo functions are single objectives, so expose them as a
+            # duplicated component list to satisfy the mini-batch SGD interface.
+            return [function.f] * optimizer.batch_size
+
+        return function.f
+
+    @staticmethod
     def run(optimizer, function, x0, steps=100, tol=1e-6):
         """Run optimizer and collect trajectory with diagnostics.
 
@@ -77,8 +88,10 @@ class TrajectoryRunner:
         Returns:
             Trajectory object
         """
+        objective = TrajectoryRunner._build_optimizer_objective(
+            optimizer, function)
         trajectory_array = optimizer.optimize(
-            function.f, x0, steps=steps, tol=tol)
+            objective, x0, steps=steps, tol=tol)
         optimizer_name = optimizer.__class__.__name__
 
         diagnostics_data = Diagnostics.compute_trajectory_diagnostics(
