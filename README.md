@@ -11,6 +11,9 @@ It includes:
 - Visualization utilities (contours, vector fields, loss curves, 3D surfaces)
 - Reproducible experiment scripts and a Streamlit UI
 
+## Demo
+[![Optimization Dynamics Lab Demo](https://img.youtube.com/vi/slsHDTdmXA4/0.jpg)](https://www.youtube.com/watch?v=slsHDTdmXA4)
+
 ## Installation
 
 ```bash
